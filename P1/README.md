@@ -16,7 +16,15 @@ En este primer paso se relacionan las coordenadas de Gazebo (metros) con los pí
 coef_col[2] = coef_col[2] + 1    
 coef_fila[2] = coef_fila[2] + 21
 ```
+
 - El mapa parecía descuadrado: El robot aparece unos 18 cm más arriba que en nuestro mapa. El problema está en su dibujo, que coloca la esquina del icono en la posición del robot y no su centro. El láser confirma nuestra calibración, así que no la cambiamos.
+
+- El láser no está en el centro del robot: Al buscar la corrección proyectábamos el láser desde el centro del robot, pero el láser va 13,9 cm por delante de él. Teniéndolo en cuenta, la corrección en columnas pasa de +1 a +15 px, es decir, el robot estaba unos 15 cm desplazado de donde creía el código. Esta era la causa principal de que se enganchara en algunos picos. Además, pasamos a usar el mapa nuevo `(/workspace/code/mapgrannyannie.png)`, con el que la corrección en filas queda en +20.
+
+```python
+coef_col[2] = coef_col[2] + 15
+coef_fila[2] = coef_fila[2] + 20
+```
 
 ## PASO 2: OCUPACIÓN DE LA REJILLA
 
@@ -36,8 +44,17 @@ if n_negros >= MINIMO_PIXELES_NEGROS:
 - Un pasillo quedaba cerrado: Con el margen, el pasillo de 60 cm que rodea el mueble de la habitación de arriba a la derecha salía entero ocupado, porque las fronteras de las celdas caían junto a la pared. Probamos a desplazar la rejilla de 1 en 1 cm y elegimos la posición que abre el pasillo y deja más celdas libres.
 
 ```python
-X_ESQUINA_REJILLA = -4.54       
-Y_ESQUINA_REJILLA = -3.53
+X_ESQUINA_REJILLA = -4.43
+Y_ESQUINA_REJILLA = -3.55
+```
+
+- Una casilla junto al sofá de la izquierda: Con todo lo anterior, el robot aún se enganchaba en la esquina de ese sofá. En esa zona el sofá real está unos 9 cm más abajo de lo que indica el mapa con nuestra calibración, así que la casilla (15, 28) parecía libre, pero su centro quedaba a solo 15 cm del sofá y el robot mide unos 17 cm de radio. La marcamos a mano como ocupada.
+
+```python
+CASILLAS_BLOQUEADAS = [(15, 28)]
+
+if n_negros >= MINIMO_PIXELES_NEGROS or (i, j) in CASILLAS_BLOQUEADAS:
+    celda_ocupada[i][j] = True
 ```
 
 ## PASO 3: PLANIFICACIÓN DEL BSA Y NAVEGACIÓN
@@ -58,6 +75,7 @@ La planificación se pinta en el navegador: verde son las celdas visitadas, rojo
 k = DIRECCIONES.index(direccion)
 orden_prioridad = DIRECCIONES[k:] + DIRECCIONES[:k]   
 ```
+
 - La vuelta al punto de retorno debía ser directa, no por cuadrículas: La búsqueda en anchura da un camino celda a celda. Lo simplificamos: desde cada punto saltamos al más lejano que se ve en línea recta sin pisar celdas ocupadas.
 
 - El robot oscilaba de izquierda a derecha y avanzaba muy lento: Apuntaba al centro de cada celda con una ganancia demasiado alta. Lo arreglamos de dos formas:
@@ -69,6 +87,7 @@ orden_prioridad = DIRECCIONES[k:] + DIRECCIONES[:k]
 HAL.setV(min(VELOCIDAD_MAXIMA, distancia))    
 HAL.setW(KP * error_orientacion)              
 ```
+
 - Se quedaba atascado contra alguna pared: Donde la pared real está más cerca de lo que dice el mapa, el robot empujaba sin llegar al centro de la celda. Ahora, si el láser ve una pared delante a menos de 25 cm, damos la celda por alcanzada aunque no esté justo en su centro.
 
 ```python
@@ -78,33 +97,21 @@ elif abs(error_orientacion) <= ANGULO_MAX and distancia_delante < DIST_PARED:
     n = n + 1
 ```
 
-- Se quedaba atascado en algunos picos: Aun con el margen y el láser, durante la ejecución final y las pruebas previas, el robot se quedaba atascado en los mismos 4 picos, es decir, en esquinas salientes de paredes y muebles. Se debe sobre todo al descuadre entre el mapa y la casa real: en esas zonas el robot cree que tiene hueco para pasar y roza la esquina con un lateral. Además, el láser solo mira al frente, así que no detecta el pico. Cuando ocurría, movimos el robot a mano en Gazebo con la herramienta de traslación, desplazándolo a lo largo de sus ejes x e y hasta despegarlo. Después continuaba la ruta con normalidad.
+- Recortaba las esquinas: Dábamos cada punto por alcanzado cuando el robot estaba a menos de 20 cm, así que empezaba a girar hacia el siguiente antes de tiempo y, al doblar, rozaba la mesa del comedor. Bajamos la tolerancia a 5 cm.
+
+```python
+TOLERANCIA = 0.05         # a esta distancia (m) damos el punto por alcanzado
+```
+
+- Se quedaba atascado en algunos picos: Aún con el margen y el láser, durante la ejecución del vídeo y las pruebas previas, el robot se quedaba atascado en los mismos 4 picos, es decir, en esquinas salientes de paredes y muebles. Se debía sobre todo al descuadre entre el mapa y la casa real: en esas zonas el robot creía que tenía hueco para pasar y rozaba la esquina con un lateral. Además, el láser solo mira al frente, así que no detecta el pico. Cuando ocurría, movimos el robot a mano en Gazebo con la herramienta de traslación, desplazándolo a lo largo de sus ejes x e y hasta despegarlo. Después continuaba la ruta con normalidad. Al final vimos que el descuadre venía sobre todo del error de calibración del láser (paso 1). Con la calibración corregida, sin recortar las esquinas y con la casilla del sofá bloqueada (paso 2), el robot ya no se atasca en ningún sitio y además limpia debajo de la mesa baja. Durante las pruebas llegamos a rellenar la mesa en el mapa para que no entrase, pero con la calibración corregida ya no hace falta.
 
 ## VÍDEO Y MAPA BARRIDO 
 
-[vídeo del funcionamiento](https://drive.google.com/file/d/1RhdNk6qN4cj8cs5GNV3l_hkXeArax-u_/view?usp=sharing)
-
-En algún momento del vídeo se ve cómo desplazamos el robot a mano en Gazebo cuando se queda enganchado en un pico.
+[vídeo del funcionamiento](https://drive.google.com/file/d/1WHyEMaoOQjbOmiB-o_O3Paaxa037edG1/view?usp=sharing)
 
 ### Mapa barrido al terminar
 
-<img width="907" height="745" alt="Captura desde 2026-09-30 11-24-17" src="https://github.com/user-attachments/assets/7e32a6e5-36fb-4e66-ac3d-3361aedc4c50" />
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+<img width="589" height="593" alt="Captura desde 2026-10-07 19-37-25" src="https://github.com/user-attachments/assets/503f1cd8-f6dd-465f-ae83-e50b2010cfd5" />
 
 
 
