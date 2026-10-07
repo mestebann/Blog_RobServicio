@@ -36,9 +36,9 @@ inversa = np.linalg.inv(traspuesta @ matriz_sistema)
 coef_col = inversa @ traspuesta @ columnas_medidas
 coef_fila = inversa @ traspuesta @ filas_medidas
 
-# Correccion de la traslacion que medimos con el laser (en pixeles)
-coef_col[2] = coef_col[2] + 1
-coef_fila[2] = coef_fila[2] + 21
+# Correccion de la traslacion que medimos con el laser (en pixeles). 
+coef_col[2] = coef_col[2] + 15
+coef_fila[2] = coef_fila[2] + 20
 
 
 # Pasa un punto de Gazebo (en metros) a pixeles del mapa
@@ -51,13 +51,15 @@ def gazebo_a_pixel(x_gazebo, y_gazebo):
 # PASO 2: rejilla de ocupacion 
 LADO_CELDA = 0.30               # lado de la celda (m), un poco menor que el robot
 MINIMO_PIXELES_NEGROS = 20      # si la celda tiene al menos estos pixeles negros, esta ocupada
-MARGEN = 6                      # pixeles que miramos alrededor de cada celda (1 px = 1 cm)
-X_ESQUINA_REJILLA = -4.54       # esquina de la celda (0, 0) en Gazebo
-Y_ESQUINA_REJILLA = -3.53
+MARGEN = 8                      # pixeles que miramos alrededor de cada celda (1 px = 1 cm)
+X_ESQUINA_REJILLA = -4.43       # esquina de la celda (0, 0) en Gazebo
+Y_ESQUINA_REJILLA = -3.55
 CELDAS_EN_X = 33                # numero de celdas en x y en y: cubren toda la casa
 CELDAS_EN_Y = 32                # sin salirse de la imagen
+# Casillas que ponemos ocupadas a mano
+CASILLAS_BLOQUEADAS = [(15, 28)]
 
-mapa = WebGUI.getMap('/resources/exercises/vacuum_cleaner_loc/images/mapgrannyannie.png')
+mapa = WebGUI.getMap('/workspace/code/mapgrannyannie.png')     
 pixeles_negros = mapa[:, :, 0] < 128        # True en los pixeles negros (obstaculos)
 celda_ocupada = np.zeros((CELDAS_EN_X, CELDAS_EN_Y), dtype=bool)
 
@@ -87,7 +89,7 @@ for i in range(CELDAS_EN_X):
         # pixeles a su alrededor, para que el robot no pase pegado a las paredes
         n_negros = np.sum(pixeles_negros[fila_min - MARGEN:fila_max + MARGEN,
                                          col_min - MARGEN:col_max + MARGEN])
-        if n_negros >= MINIMO_PIXELES_NEGROS:
+        if n_negros >= MINIMO_PIXELES_NEGROS or (i, j) in CASILLAS_BLOQUEADAS:
             celda_ocupada[i][j] = True
             mapa[fila_min:fila_max, col_min:col_max] = 0     # celda ocupada: la pintamos negra
         else:
@@ -97,8 +99,7 @@ for i in range(CELDAS_EN_X):
 
 # PASO 3: planificacion de la ruta con BSA y navegación
 
-# Direcciones de movimiento entre celdas (cambio en i, cambio en j), con
-# el nombre que tienen en el mapa: +x de Gazebo va hacia la izquierda y +y hacia abajo
+# Direcciones de movimiento entre celdas (cambio en i, cambio en j)
 OESTE = (1, 0)
 NORTE = (0, -1)
 ESTE = (-1, 0)
@@ -247,8 +248,9 @@ VELOCIDAD_MAXIMA = 0.4    # velocidad lineal maxima (m/s)
 KP = 1.0                  # ganancia del control de orientacion
 ANGULO_MAX = 0.1          # si el error de orientacion es mayor (rad), gira sin avanzar
 GIRO_MINIMO = 0.3         # velocidad minima de giro en el sitio (rad/s): con menos el robot no llega a girar
-TOLERANCIA = 0.10         # a esta distancia (m) damos el punto por alcanzado
+TOLERANCIA = 0.1         # a esta distancia (m) damos el punto por alcanzado
 DIST_PARED = 0.25         # si el laser ve una pared delante a menos de esto (m), no seguimos avanzando
+
 
 # Centro de una celda en metros de Gazebo
 def centro(celda):
@@ -306,7 +308,7 @@ while n < len(ruta):
         HAL.setV(min(VELOCIDAD_MAXIMA, distancia))
         HAL.setW(KP * error_orientacion)
 
-    Frequency.tick(20)
+    Frequency.tick(20)        
 
 # Plan terminado: paramos el robot
 HAL.setV(0)
