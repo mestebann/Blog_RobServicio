@@ -1,8 +1,9 @@
 # Blog_RobServicio
 
-El objetivo es que un robot de servicio mueva de forma autónoma las 6 estanterías del almacén Warehouse 1 de un sitio a otro. Las rutas se planifican con la biblioteca OMPL y el robot las sigue con un pilotaje reactivo basado solo en su posición. Hay tres casos: en el 1, el robot holonómico se planifica como un punto con los obstáculos engordados; en el 2, con su forma real y sin engordar los obstáculos, teniendo en cuenta que a la vuelta lleva la estantería encima; y en el 3 se usa el robot Ackermann, que es rectangular y no puede girar en el sitio. La variable `CASE` elige cuál se ejecuta. El código es una máquina de estados y la práctica la he dividido en cinco pasos: el mapa y los traslados, la planificación con OMPL y un paso por cada caso.
+El objetivo es que un robot de servicio mueva de forma autónoma las 6 estanterías del almacén Warehouse 1 de un sitio a otro. Las rutas se planifican con la biblioteca OMPL y el robot las sigue con un pilotaje reactivo basado solo en su posición. Hay tres casos: en el 1, el robot holonómico se planifica como un punto con los obstáculos engordados; en el 2, con su forma real y sin engordar los obstáculos, teniendo en cuenta que a la vuelta lleva la estantería encima; y en el 3 se usa el robot Ackermann, que es rectangular y no puede girar en el sitio. El código es una máquina de estados y la práctica la he dividido en cinco pasos: el mapa y los traslados, la planificación con OMPL y un paso por cada caso.
 
-`[PLAN → TURN ⇄ DRIVE → STOP → PLATFORM] x 2 → EXIT) x 6 → DONE` en los casos 1 y 2
+`([PLAN → TURN ⇄ DRIVE → STOP → PLATFORM] x 2 → EXIT) x 6 → DONE` en los casos 1 y 2
+
 `([PLAN → FOLLOW ⇄ STOP → PLATFORM] x 2 → EXIT) x 6 → DONE` en el caso 3
 
 Lo que va entre corchetes se hace dos veces en cada traslado: una para ir a por la estantería y levantarla, y otra para llevarla a su destino y dejarla.
@@ -27,7 +28,7 @@ Las medidas de los robots son las de su modelo URDF/Xacro: la plataforma del hol
 
 En el estado `PLAN` el robot pide a OMPL una ruta hasta la estantería, si va sin carga, o hasta su destino, si la lleva encima. OMPL se usa como viene en la guía de la práctica: un espacio `SE2StateSpace` con los límites del mapa, un `SpaceInformation` con la función que dice si un estado es válido, los estados de inicio y fin con `setX`, `setY` y `setYaw`, un `ProblemDefinition` y el planificador RRT*. La ruta se saca con `getSolutionPath()` y `printAsMatrix()`, que da una línea (x, y, yaw) por cada punto.
 
-De un caso a otro solo cambia la función de validez, `is_valid`, y en el caso 3 también el espacio de estados. OMPL busca durante 3 s y, si no encuentra ruta, se le pide otra vez, hasta 5 veces. Para que no llene la terminal con sus mensajes, se dejan solo sus avisos con `ou.setLogLevel(ou.LOG_WARN)`.
+Cada fichero tiene su propia función de validez, `is_valid`, y en el caso 3 cambia también el espacio de estados. OMPL busca durante 3 s y, si no encuentra ruta, se le pide otra vez, hasta 5 veces. Para que no llene la terminal con sus mensajes, se dejan solo sus avisos con `ou.setLogLevel(ou.LOG_WARN)`.
 
 OMPL no planifica hasta el destino, sino hasta un punto de espera que está detrás de él, a 2,04 m (3 m en el caso 3). Desde ahí el robot entra en línea recta, alineado con la estantería o con su hueco, y al dejarla sale marcha atrás por la misma recta.
 
@@ -71,7 +72,7 @@ La ruta se divide en tramos hacia delante y tramos marcha atrás, y el robot se 
 
 ### Problemas y soluciones
 
-- El coche se salía de la ruta en las curvas: con radio 1 m y 0,3 m/s se separaba hasta 0,5 m, porque las ruedas tardan en girar y, cuando por fin giran, el coche ya ha avanzado. Se sube el radio a 1,3 m, se baja la velocidad a 0,2 m/s y hace que cada tramo empiece casi parado (0,01 m/s) y acelere poco a poco durante 3 s, para que las ruedas giren antes de que avance mucho.
+- El coche se salía de la ruta en las curvas: con radio 1 m y 0,3 m/s se separaba hasta 0,5 m, porque las ruedas tardan en girar y, cuando por fin giran, el coche ya ha avanzado. Se sube el radio a 1,3 m, se baja la velocidad a 0,2 m/s y cada tramo empieza casi parado (0,01 m/s) y acelera poco a poco durante 3 s, para que las ruedas giren antes de que avance mucho.
 
 - OMPL no veía algunas patas: en las curvas, OMPL solo comprueba más o menos cada 27 cm, y una pata es más fina. Ahora se rellena la ruta con un punto cada 5 cm y se comprueban todos; si alguno choca, se pide otra ruta.
 
